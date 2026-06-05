@@ -27,20 +27,22 @@ st.markdown("""
 conn = sqlite3.connect("app.db", check_same_thread=False)
 cursor = conn.cursor()
 
-# Create table (latest structure)
+# Create safe table
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     user TEXT,
     idea TEXT,
     score INTEGER
 )
 """)
 
-# 🔥 AUTO FIX OLD DB (IMPORTANT)
-try:
-    cursor.execute("ALTER TABLE history ADD COLUMN user TEXT")
-except:
-    pass
+# Ensure columns exist (auto migration)
+for col, typ in [("user","TEXT"),("idea","TEXT"),("score","INTEGER")]:
+    try:
+        cursor.execute(f"ALTER TABLE history ADD COLUMN {col} {typ}")
+    except:
+        pass
 
 conn.commit()
 
@@ -49,11 +51,14 @@ client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
 # ================= FUNCTIONS =================
 def ai_response(prompt):
-    response = client.chat.completions.create(
-        model="llama3-70b-8192",
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return response.choices[0].message.content
+    try:
+        response = client.chat.completions.create(
+            model="llama3-70b-8192",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return response.choices[0].message.content
+    except:
+        return "⚠️ AI busy. Please try again."
 
 
 def analyze(idea):
@@ -85,7 +90,7 @@ st.sidebar.text_input("👤 Username", key="user")
 
 # ================= UI =================
 st.title("🚀 AI Startup Consultant")
-st.caption("Next-level AI Product with Analytics + Chat + Planning")
+st.caption("Final Boss Version | AI + Analytics + Chat + Planning")
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs(
     ["🧪 Analyze", "⚔️ Compare", "💬 Chat", "📄 Plan", "📊 Analytics"]
@@ -98,19 +103,16 @@ with tab1:
     if st.button("Analyze"):
         if idea:
             with st.spinner("Analyzing..."):
-                try:
-                    result = analyze(idea)
-                except:
-                    result = "Fallback analysis\nFeasibility Score: 7/10"
+                result = analyze(idea)
 
             st.markdown(f"<div class='card'>{result}</div>", unsafe_allow_html=True)
 
             score = extract_score(result)
             st.progress(score / 10)
 
-            # Save
+            # SAFE INSERT ✅
             cursor.execute(
-                "INSERT INTO history VALUES (?, ?, ?)",
+                "INSERT INTO history (user, idea, score) VALUES (?, ?, ?)",
                 (st.session_state.user, idea, score)
             )
             conn.commit()
@@ -129,12 +131,8 @@ with tab2:
     i2 = st.text_area("Idea 2")
 
     if st.button("Compare"):
-        try:
-            r1 = analyze(i1)
-            r2 = analyze(i2)
-        except:
-            r1 = "Fallback Score: 6/10"
-            r2 = "Fallback Score: 7/10"
+        r1 = analyze(i1)
+        r2 = analyze(i2)
 
         s1 = extract_score(r1)
         s2 = extract_score(r2)
@@ -183,21 +181,16 @@ with tab4:
 with tab5:
     st.subheader("📊 Advanced Analytics")
 
-    try:
-        cursor.execute(
-            "SELECT idea, score FROM history WHERE user=?",
-            (st.session_state.user,)
-        )
-        data = cursor.fetchall()
-    except:
-        data = []
+    cursor.execute(
+        "SELECT idea, score FROM history WHERE user=?",
+        (st.session_state.user,)
+    )
+    data = cursor.fetchall()
 
     if data:
         df = pd.DataFrame(data, columns=["Idea", "Score"])
 
         st.dataframe(df)
-
-        # Charts
         st.bar_chart(df.set_index("Idea"))
 
         avg_score = df["Score"].mean()
@@ -208,9 +201,8 @@ with tab5:
 
         st.line_chart(df["Score"])
 
-        # Insights
         if avg_score > 7:
-            st.success("🔥 Strong ideas!")
+            st.success("🔥 Strong startup ideas!")
         elif avg_score > 5:
             st.warning("⚠️ Moderate ideas")
         else:
