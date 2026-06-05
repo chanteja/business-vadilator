@@ -1,7 +1,8 @@
-from google import genai
+from groq import Groq
 import streamlit as st
 import sqlite3
 import re
+import pandas as pd
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 import io
@@ -28,8 +29,8 @@ CREATE TABLE IF NOT EXISTS history (
 
 conn.commit()
 
-# ================= API =================
-client = genai.Client(api_key=st.secrets["API_KEY"])
+# ================= GROQ API =================
+client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
 # ================= FUNCTIONS =================
 def analyze_business_idea(idea):
@@ -49,11 +50,12 @@ def analyze_business_idea(idea):
     - Final Verdict
     """
 
-    response = client.models.generate_content(
-        model="gemini-2.0-flash-lite",
-        contents=prompt
+    response = client.chat.completions.create(
+        model="llama3-70b-8192",
+        messages=[{"role": "user", "content": prompt}]
     )
-    return response.text
+
+    return response.choices[0].message.content
 
 
 def extract_score(text):
@@ -61,7 +63,6 @@ def extract_score(text):
     return int(match.group(1)) if match else 5
 
 
-# 🔐 Strong Password
 def is_strong_password(password):
     return (
         len(password) >= 6 and
@@ -71,7 +72,6 @@ def is_strong_password(password):
     )
 
 
-# 📄 PDF Generator
 def generate_pdf(text):
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=letter)
@@ -143,7 +143,7 @@ if not st.session_state.logged_in:
 # ================= MAIN UI =================
 st.set_page_config(page_title="AI Business Validator", layout="wide")
 
-st.title("🚀 AI Business Validator")
+st.title("🚀 AI Business Validator (Powered by Groq)")
 
 if st.button("Logout"):
     st.session_state.clear()
@@ -158,9 +158,9 @@ if mode == "Single Idea":
     if st.button("🔍 Analyze"):
         if idea:
             try:
-                st.warning("⏳ Please wait while AI analyzes your idea...")
-                
-                with st.spinner("🤖 Generating response..."):
+                st.warning("⏳ AI is analyzing your idea...")
+
+                with st.spinner("🤖 Generating..."):
                     result = analyze_business_idea(idea)
 
                 st.success("✅ Analysis Complete")
@@ -169,24 +169,19 @@ if mode == "Single Idea":
                 score = extract_score(result)
                 st.progress(score / 10)
 
-                # Save to DB
+                # Save
                 cursor.execute(
                     "INSERT INTO history VALUES (?, ?, ?, ?)",
                     (st.session_state.username, idea, score, result)
                 )
                 conn.commit()
 
-                # 📄 PDF Download
+                # PDF
                 pdf = generate_pdf(result)
-                st.download_button(
-                    "📄 Download PDF",
-                    pdf,
-                    file_name="analysis.pdf",
-                    mime="application/pdf"
-                )
+                st.download_button("📄 Download PDF", pdf, "analysis.pdf")
 
-            except:
-                st.error("⚠️ API quota exceeded. Try later.")
+            except Exception as e:
+                st.error(f"❌ Error: {e}")
 
 
 # ================= COMPARE =================
@@ -204,14 +199,16 @@ else:
                 score1 = extract_score(res1)
                 score2 = extract_score(res2)
 
-                st.write("### 🥇 Idea 1", res1)
+                st.write("### 🥇 Idea 1")
+                st.write(res1)
                 st.progress(score1 / 10)
 
-                st.write("### 🥈 Idea 2", res2)
+                st.write("### 🥈 Idea 2")
+                st.write(res2)
                 st.progress(score2 / 10)
 
-            except:
-                st.error("⚠️ API error")
+            except Exception as e:
+                st.error(f"❌ Error: {e}")
 
 
 # ================= HISTORY =================
@@ -225,7 +222,6 @@ cursor.execute(
 data = cursor.fetchall()
 
 if data:
-    import pandas as pd
     df = pd.DataFrame(data, columns=["Idea", "Score"])
     st.dataframe(df)
     st.line_chart(df["Score"])
