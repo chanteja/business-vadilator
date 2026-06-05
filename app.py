@@ -28,7 +28,7 @@ st.markdown("""
 conn = sqlite3.connect("app.db", check_same_thread=False)
 cursor = conn.cursor()
 
-# Users table
+# Create tables safely
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS users (
     username TEXT PRIMARY KEY,
@@ -36,7 +36,6 @@ CREATE TABLE IF NOT EXISTS users (
 )
 """)
 
-# History table
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,7 +53,7 @@ client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 # ================= AI (UNSTOPPABLE) =================
 def ai_response(prompt):
 
-    # Primary
+    # Try 1
     try:
         res = client.chat.completions.create(
             model="llama3-70b-8192",
@@ -64,7 +63,7 @@ def ai_response(prompt):
     except:
         pass
 
-    # Backup
+    # Try 2
     try:
         time.sleep(1)
         res = client.chat.completions.create(
@@ -76,10 +75,8 @@ def ai_response(prompt):
         pass
 
     # Final fallback
-    return f"""
-⚠️ AI busy → fallback response
-
-Idea Summary: {prompt[:100]}
+    return """
+⚠️ AI is busy. Showing sample output:
 
 - Market: Growing  
 - Target: Students  
@@ -103,20 +100,14 @@ def analyze(idea):
     """
     return ai_response(prompt)
 
-
 def extract_score(text):
     match = re.search(r'(\d+)/10', text)
     return int(match.group(1)) if match else 5
 
-
 def strong_password(p):
-    return (
-        len(p) >= 6 and
-        any(c.isupper() for c in p) and
-        any(c.isdigit() for c in p)
-    )
+    return len(p) >= 6 and any(c.isupper() for c in p) and any(c.isdigit() for c in p)
 
-# ================= LOGIN SYSTEM =================
+# ================= LOGIN =================
 if "logged" not in st.session_state:
     st.session_state.logged = False
 
@@ -126,7 +117,7 @@ def login(u, p):
 
 def signup(u, p):
     try:
-        cursor.execute("INSERT INTO users VALUES (?,?)", (u, p))
+        cursor.execute("INSERT INTO users VALUES (?, ?)", (u, p))
         conn.commit()
         return True
     except:
@@ -150,31 +141,33 @@ if not st.session_state.logged:
                 st.success("✅ Welcome " + user)
                 st.rerun()
             else:
-                st.error("❌ Invalid login")
+                st.error("❌ Invalid credentials")
 
     else:
         if st.button("Signup"):
             if not strong_password(pwd):
-                st.error("Weak password (Use Uppercase + number)")
+                st.error("Password must contain uppercase + number")
             elif signup(user, pwd):
                 st.success("Account created! Login now")
             else:
-                st.error("User exists")
+                st.error("User already exists")
 
     st.stop()
 
-# ================= MAIN =================
+# ================= MAIN APP =================
 st.title("🚀 AI Startup Consultant")
 
-tabs = st.tabs(["🧪 Analyze", "⚔️ Compare", "💬 Chat", "📄 Plan", "📊 Analytics"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(
+    ["🧪 Analyze", "⚔️ Compare", "💬 Chat", "📄 Plan", "📊 Analytics"]
+)
 
 # ================= ANALYZE =================
-with tabs[0]:
-    idea = st.text_area("Enter idea")
+with tab1:
+    idea = st.text_area("Enter your idea")
 
     if st.button("Analyze"):
         if idea:
-            st.info("🤖 AI running (unstoppable mode)")
+            st.info("🤖 AI Running...")
             result = analyze(idea)
 
             st.markdown(f"<div class='card'>{result}</div>", unsafe_allow_html=True)
@@ -182,6 +175,7 @@ with tabs[0]:
             score = extract_score(result)
             st.progress(score / 10)
 
+            # SAFE INSERT
             cursor.execute(
                 "INSERT INTO history (user, idea, score) VALUES (?, ?, ?)",
                 (st.session_state.user, idea, score)
@@ -189,7 +183,7 @@ with tabs[0]:
             conn.commit()
 
 # ================= COMPARE =================
-with tabs[1]:
+with tab2:
     i1 = st.text_area("Idea 1")
     i2 = st.text_area("Idea 2")
 
@@ -210,12 +204,19 @@ with tabs[1]:
             st.markdown(f"<div class='card'>{r2}</div>", unsafe_allow_html=True)
             st.progress(s2 / 10)
 
+        if s1 > s2:
+            st.success("🏆 Idea 1 Wins")
+        elif s2 > s1:
+            st.success("🏆 Idea 2 Wins")
+        else:
+            st.info("🤝 Tie")
+
 # ================= CHAT =================
-with tabs[2]:
+with tab3:
     if "chat" not in st.session_state:
         st.session_state.chat = []
 
-    msg = st.text_input("Ask anything")
+    msg = st.text_input("Ask something")
 
     if st.button("Send"):
         st.session_state.chat.append(("You", msg))
@@ -226,15 +227,15 @@ with tabs[2]:
         st.write(f"**{s}:** {m}")
 
 # ================= PLAN =================
-with tabs[3]:
-    idea2 = st.text_area("Idea for business plan")
+with tab4:
+    idea2 = st.text_area("Enter idea for business plan")
 
     if st.button("Generate Plan"):
-        plan = ai_response(f"Create full startup plan for {idea2}")
+        plan = ai_response(f"Create startup plan for {idea2}")
         st.write(plan)
 
 # ================= ANALYTICS =================
-with tabs[4]:
+with tab5:
     cursor.execute(
         "SELECT idea, score FROM history WHERE user=?",
         (st.session_state.user,)
@@ -243,6 +244,7 @@ with tabs[4]:
 
     if data:
         df = pd.DataFrame(data, columns=["Idea", "Score"])
+
         st.dataframe(df)
         st.bar_chart(df.set_index("Idea"))
 
@@ -252,4 +254,4 @@ with tabs[4]:
         best = df.loc[df["Score"].idxmax()]
         st.success(f"Best Idea: {best['Idea']} ({best['Score']}/10)")
     else:
-        st.info("No data yet")
+        st.info("No history yet")
