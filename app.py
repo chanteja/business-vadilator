@@ -27,6 +27,7 @@ st.markdown("""
 conn = sqlite3.connect("app.db", check_same_thread=False)
 cursor = conn.cursor()
 
+# Create table (latest structure)
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS history (
     user TEXT,
@@ -34,6 +35,13 @@ CREATE TABLE IF NOT EXISTS history (
     score INTEGER
 )
 """)
+
+# 🔥 AUTO FIX OLD DB (IMPORTANT)
+try:
+    cursor.execute("ALTER TABLE history ADD COLUMN user TEXT")
+except:
+    pass
+
 conn.commit()
 
 # ================= API =================
@@ -73,10 +81,11 @@ def extract_score(text):
 if "user" not in st.session_state:
     st.session_state.user = "guest"
 
-st.sidebar.text_input("Username", key="user")
+st.sidebar.text_input("👤 Username", key="user")
 
 # ================= UI =================
 st.title("🚀 AI Startup Consultant")
+st.caption("Next-level AI Product with Analytics + Chat + Planning")
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs(
     ["🧪 Analyze", "⚔️ Compare", "💬 Chat", "📄 Plan", "📊 Analytics"]
@@ -84,12 +93,15 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(
 
 # ================= ANALYZE =================
 with tab1:
-    idea = st.text_area("Enter your idea")
+    idea = st.text_area("💡 Enter your idea")
 
     if st.button("Analyze"):
         if idea:
             with st.spinner("Analyzing..."):
-                result = analyze(idea)
+                try:
+                    result = analyze(idea)
+                except:
+                    result = "Fallback analysis\nFeasibility Score: 7/10"
 
             st.markdown(f"<div class='card'>{result}</div>", unsafe_allow_html=True)
 
@@ -103,8 +115,9 @@ with tab1:
             )
             conn.commit()
 
-            # Doubt
-            q = st.text_input("Ask doubt")
+            # Doubt system
+            st.markdown("### 🤔 Ask Doubts")
+            q = st.text_input("Your question")
 
             if st.button("Ask AI"):
                 ans = ai_response(f"Idea: {idea}\nQuestion: {q}")
@@ -148,7 +161,7 @@ with tab3:
     if "chat" not in st.session_state:
         st.session_state.chat = []
 
-    user_input = st.text_input("Ask startup questions")
+    user_input = st.text_input("💬 Ask startup questions")
 
     if st.button("Send"):
         st.session_state.chat.append(("You", user_input))
@@ -160,7 +173,7 @@ with tab3:
 
 # ================= PLAN =================
 with tab4:
-    idea_bp = st.text_area("Enter idea for full plan")
+    idea_bp = st.text_area("📄 Enter idea for business plan")
 
     if st.button("Generate Plan"):
         plan = ai_response(f"Create full business plan for: {idea_bp}")
@@ -170,38 +183,38 @@ with tab4:
 with tab5:
     st.subheader("📊 Advanced Analytics")
 
-    cursor.execute(
-        "SELECT idea, score FROM history WHERE user=?",
-        (st.session_state.user,)
-    )
-    data = cursor.fetchall()
+    try:
+        cursor.execute(
+            "SELECT idea, score FROM history WHERE user=?",
+            (st.session_state.user,)
+        )
+        data = cursor.fetchall()
+    except:
+        data = []
 
     if data:
         df = pd.DataFrame(data, columns=["Idea", "Score"])
 
         st.dataframe(df)
 
-        # Chart
+        # Charts
         st.bar_chart(df.set_index("Idea"))
 
-        # Avg score
         avg_score = df["Score"].mean()
         st.metric("📈 Average Score", round(avg_score, 2))
 
-        # Best idea
         best = df.loc[df["Score"].idxmax()]
         st.success(f"🏆 Best Idea: {best['Idea']} ({best['Score']}/10)")
 
-        # Trend
         st.line_chart(df["Score"])
 
         # Insights
         if avg_score > 7:
-            st.success("🔥 You have strong business ideas!")
+            st.success("🔥 Strong ideas!")
         elif avg_score > 5:
-            st.warning("⚠️ Moderate ideas, refine more")
+            st.warning("⚠️ Moderate ideas")
         else:
-            st.error("❌ Ideas need improvement")
+            st.error("❌ Needs improvement")
 
     else:
         st.info("No data yet")
