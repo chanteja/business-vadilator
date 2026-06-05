@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS history (
 conn.commit()
 
 # ================= API =================
-client = genai.Client(api_key=st.secrets["AQ.Ab8RN6JiaxAIHFxU2h5LegfKhECD8eIH-xKn9PNaGOgHuUhONQ"])
+client = genai.Client(api_key=st.secrets["API_KEY"])
 
 # ================= FUNCTIONS =================
 def analyze_business_idea(idea):
