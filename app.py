@@ -50,7 +50,7 @@ def analyze_business_idea(idea):
     """
 
     response = client.models.generate_content(
-        model="gemini-1.5-flash-lite",
+        model="gemini-3.0-flash-lite",
         contents=prompt
     )
     return response.text
