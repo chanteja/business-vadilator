@@ -4,6 +4,7 @@ import sqlite3
 import pandas as pd
 import re
 import time
+import os
 
 # ================= CONFIG =================
 st.set_page_config(page_title="AI Startup Consultant", layout="wide")
@@ -20,15 +21,24 @@ st.markdown("""
     padding: 20px;
     border-radius: 15px;
     background: #1e293b;
+    color: white;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# ================= DB =================
-conn = sqlite3.connect("app.db", check_same_thread=False)
+# ================= DB FIX (FINAL) =================
+DB_FILE = "app.db"
+
+# 🔥 Reset old broken DB ONLY ONCE
+if "db_initialized" not in st.session_state:
+    if os.path.exists(DB_FILE):
+        os.remove(DB_FILE)
+    st.session_state.db_initialized = True
+
+conn = sqlite3.connect(DB_FILE, check_same_thread=False)
 cursor = conn.cursor()
 
-# Create tables safely
+# Create tables
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS users (
     username TEXT PRIMARY KEY,
@@ -76,7 +86,7 @@ def ai_response(prompt):
 
     # Final fallback
     return """
-⚠️ AI is busy. Showing sample output:
+⚠️ AI busy → fallback response
 
 - Market: Growing  
 - Target: Students  
@@ -123,17 +133,17 @@ def signup(u, p):
     except:
         return False
 
-# ================= AUTH UI =================
+# ================= AUTH =================
 if not st.session_state.logged:
 
     st.title("🔐 Login / Signup")
 
-    choice = st.radio("Select", ["Login", "Signup"])
+    mode = st.radio("Select", ["Login", "Signup"])
 
     user = st.text_input("Username")
     pwd = st.text_input("Password", type="password")
 
-    if choice == "Login":
+    if mode == "Login":
         if st.button("Login"):
             if login(user, pwd):
                 st.session_state.logged = True
@@ -154,15 +164,13 @@ if not st.session_state.logged:
 
     st.stop()
 
-# ================= MAIN APP =================
+# ================= MAIN =================
 st.title("🚀 AI Startup Consultant")
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    ["🧪 Analyze", "⚔️ Compare", "💬 Chat", "📄 Plan", "📊 Analytics"]
-)
+tabs = st.tabs(["🧪 Analyze", "⚔️ Compare", "💬 Chat", "📄 Plan", "📊 Analytics"])
 
 # ================= ANALYZE =================
-with tab1:
+with tabs[0]:
     idea = st.text_area("Enter your idea")
 
     if st.button("Analyze"):
@@ -183,7 +191,7 @@ with tab1:
             conn.commit()
 
 # ================= COMPARE =================
-with tab2:
+with tabs[1]:
     i1 = st.text_area("Idea 1")
     i2 = st.text_area("Idea 2")
 
@@ -212,7 +220,7 @@ with tab2:
             st.info("🤝 Tie")
 
 # ================= CHAT =================
-with tab3:
+with tabs[2]:
     if "chat" not in st.session_state:
         st.session_state.chat = []
 
@@ -227,7 +235,7 @@ with tab3:
         st.write(f"**{s}:** {m}")
 
 # ================= PLAN =================
-with tab4:
+with tabs[3]:
     idea2 = st.text_area("Enter idea for business plan")
 
     if st.button("Generate Plan"):
@@ -235,7 +243,7 @@ with tab4:
         st.write(plan)
 
 # ================= ANALYTICS =================
-with tab5:
+with tabs[4]:
     cursor.execute(
         "SELECT idea, score FROM history WHERE user=?",
         (st.session_state.user,)
